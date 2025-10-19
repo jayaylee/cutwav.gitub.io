@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>오디오 자르기 데모 – WAV & M4A</title>
+  <title>오디오 자르기 데모 – WAV & M4A (다구간)</title>
   <style>
     :root { --bg:#0b1020; --panel:#121a33; --muted:#7b8bab; --accent:#89b4ff; --text:#e9eeff; --danger:#ff6b6b; }
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{max-width:980px;margin:40px auto;padding:0 20px}
+    .wrap{max-width:1100px;margin:40px auto;padding:0 20px}
     .card{background:linear-gradient(180deg,#101833,#0e1430);border:1px solid #1d2750;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
     .card .in{padding:22px 22px}
     h1{font-weight:700;letter-spacing:.2px;margin:0 0 10px;font-size:28px}
@@ -17,7 +17,7 @@
     .row>.col{flex:1 1 220px}
     input[type="text"], input[type="number"], input[type="file"], select{width:100%;padding:12px 14px;background:#0c1430;border:1px solid #22316b;color:var(--text);border-radius:12px;outline:none}
     input[type="file"]{padding:10px}
-    button{appearance:none;border:0;border-radius:14px;padding:12px 16px;font-weight:700;cursor:pointer;transition:.18s transform,.18s opacity;}
+    button{appearance:none;border:0;border-radius:14px;padding:10px 14px;font-weight:700;cursor:pointer;transition:.18s transform,.18s opacity;}
     button:active{transform:translateY(1px)}
     .btn{background:linear-gradient(180deg,#4a7dff,#3866f5);color:white;}
     .btn.secondary{background:#1b274f}
@@ -25,7 +25,7 @@
     .hint{font-size:13px;color:#9bb0db}
     .grid{display:grid;grid-template-columns:1fr;gap:14px}
     .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    canvas{width:100%;height:140px;background:#0a1230;border:1px solid #1f2a5a;border-radius:12px}
+    canvas{width:100%;height:160px;background:#0a1230;border:1px solid #1f2a5a;border-radius:12px}
     .pill{padding:4px 10px;border:1px solid #2a3b78;border-radius:999px;color:#a7b6e8;font-size:12px}
     .footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;color:#97a7d8}
     .link{color:var(--accent);text-decoration:none}
@@ -33,20 +33,26 @@
     .err{color:#ffb4b4}
     audio{width:100%; margin-top:6px}
     .stat{color:#bcd0ff}
+    table{width:100%; border-collapse:collapse;}
+    th,td{border-bottom:1px solid #24346f; padding:8px 6px; text-align:left;}
+    th{color:#cfe0ff; font-weight:700}
+    tr:hover{background:#0d1536}
+    .sm{font-size:13px}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <div class="in">
-        <h1>오디오 자르기 <span class="pill">WAV & M4A • 브라우저만</span></h1>
-        <p class="sub">파일 업로드 → <b>시작/끝</b> 시간 입력 → <b>미리듣기</b> → <b>저장</b> 순서로 사용하세요. 모든 처리는 <u>로컬</u>에서만 일어납니다.</p>
+        <h1>오디오 자르기 <span class="pill">WAV & M4A • 다구간 배치</span></h1>
+        <p class="sub">파일 업로드 → <b>시작/끝</b> 시간 입력 → <b>미리듣기</b> → <b>저장</b>. 여러 구간을 리스트에 추가해 한 번에 처리할 수 있습니다. 모든 처리는 <u>로컬</u>에서만 진행됩니다.</p>
 
         <div class="grid">
           <div>
             <label for="file">오디오 파일 (.wav / .m4a)</label>
             <input id="file" type="file" accept="audio/*,video/mp4,.wav,.m4a" />
-            <div class="hint">팁: 이 페이지에 드래그&드롭해도 됩니다.</div>
+            <div class="hint">드래그&드롭 가능</div>
             <div id="error" class="err"></div>
           </div>
 
@@ -61,9 +67,9 @@
               <input id="end" type="text" placeholder="비워두면 파일 끝까지" />
             </div>
             <div class="col">
-              <label for="bps">출력 비트 심도</label>
+              <label for="bps">출력 비트 심도(전역)</label>
               <select id="bps">
-                <option value="auto" selected>자동(디코딩값 기준)</option>
+                <option value="auto" selected>자동</option>
                 <option value="16">16‑bit PCM</option>
                 <option value="24">24‑bit PCM</option>
                 <option value="32f">32‑bit Float</option>
@@ -82,18 +88,32 @@
             </div>
           </div>
 
+          <div class="bar">
+            <button id="previewBtn" class="btn" disabled>현재 구간 미리듣기 생성</button>
+            <button id="addSeg" class="btn" disabled>현재 구간을 리스트에 추가</button>
+            <span id="clipInfo" class="stat"></span>
+          </div>
+          <audio id="preview" controls preload="metadata"></audio>
+
           <div>
-            <label>선택 구간 미리듣기</label>
-            <div class="bar">
-              <button id="previewBtn" class="btn" disabled>구간 미리듣기 만들기</button>
-              <span id="clipInfo" class="stat"></span>
-            </div>
-            <audio id="preview" controls preload="metadata"></audio>
-            <div class="hint">버튼을 누르면 선택 구간만 인코딩하여 아래 플레이어로 미리듣기 가능</div>
+            <label>구간 리스트</label>
+            <table id="segTable">
+              <thead>
+                <tr>
+                  <th style="width:70px">#</th>
+                  <th>시작</th>
+                  <th>끝</th>
+                  <th style="width:180px">동작</th>
+                </tr>
+              </thead>
+              <tbody id="segBody"></tbody>
+            </table>
+            <div class="hint">각 행의 <span class="sm">미리듣기</span>/<span class="sm">저장</span> 버튼으로 개별 처리. 아래 버튼으로 전체 ZIP 저장도 가능.</div>
           </div>
 
           <div class="bar">
-            <button id="trim" class="btn" disabled>잘라서 WAV 저장</button>
+            <button id="downloadAll" class="btn" disabled>모든 구간 ZIP 저장</button>
+            <button id="trim" class="btn secondary" disabled>현재 구간 WAV 저장</button>
             <button id="reset" class="btn danger" disabled>리셋</button>
             <span id="meta" class="hint"></span>
           </div>
@@ -112,17 +132,21 @@ const $ = sel => document.querySelector(sel);
 const fileEl=$('#file'), startEl=$('#start'), endEl=$('#end'), bpsEl=$('#bps');
 const wave=$('#wave'), playBtn=$('#play'), setStartBtn=$('#setStart'), setEndBtn=$('#setEnd');
 const previewBtn=$('#previewBtn'), previewAudio=$('#preview');
+const addSegBtn=$('#addSeg'), segBody=$('#segBody'), segTable=$('#segTable');
+const downloadAllBtn=$('#downloadAll');
 const trimBtn=$('#trim'), resetBtn=$('#reset'), meta=$('#meta'), clipInfo=$('#clipInfo');
 const errEl=$('#error');
 const cx=wave.getContext('2d');
 
 let ctx, buf, source, isPlaying=false, cursor=0, rafId=null, previewURL=null;
+let segments=[]; // {id, start, end}
+let nextId=1;
 
 function fmtTime(s){ if(!isFinite(s)) return '0:00'; const h=Math.floor(s/3600); s%=3600; const m=Math.floor(s/60); const sec=(s%60); const z=n=>String(n).padStart(2,'0'); const ss=(Math.round(sec*1000)/1000).toFixed(sec<10&&sec%1?3:0); return (h? h+':':'')+z(m)+':'+(ss.length<2?'0':'')+ss; }
 function parseTimeToSeconds(str){ if(!str) return null; str=String(str).trim(); if(/^\d+(?:\.\d+)?$/.test(str)) return parseFloat(str); const m=str.match(/^(?:(\d+):)?(?:(\d{1,2}):)?(\d{1,2})(?:\.(\d+))?$/); if(!m) throw new Error('Invalid time: '+str); const[_,H,M,S,frac]=m; const h=H?+H:0, mm=M?+M:0, ss=+S, f=frac?parseFloat('0.'+frac):0; return h*3600+mm*60+ss+f; }
 function safeParse(v){ try{ const s=parseTimeToSeconds(v); return (s==null||!isFinite(s))?null:s; }catch(_){ return null; } }
 
-function enableUI(flag){ playBtn.disabled=setStartBtn.disabled=setEndBtn.disabled=trimBtn.disabled=resetBtn.disabled=previewBtn.disabled=!flag; }
+function enableUI(flag){ playBtn.disabled=setStartBtn.disabled=setEndBtn.disabled=trimBtn.disabled=resetBtn.disabled=previewBtn.disabled=addSegBtn.disabled=downloadAllBtn.disabled=!flag; }
 function setMeta(){ if(!buf){ meta.textContent=''; return; } meta.textContent=`전체 길이 ${fmtTime(buf.duration)} • ${buf.numberOfChannels}채널 @ ${buf.sampleRate}Hz`; }
 
 function drawWave(){ const W=wave.width=wave.clientWidth*2; const H=wave.height=wave.clientHeight*2; cx.clearRect(0,0,W,H); cx.fillStyle='#0f1840'; cx.fillRect(0,0,W,H); if(!buf) return; const samples=buf.getChannelData(0); const step=Math.max(1,Math.ceil(samples.length/W)); cx.strokeStyle='#6fa2ff'; cx.lineWidth=2; cx.beginPath(); for(let x=0;x<W;x++){ const i=x*step; let min=1,max=-1; for(let j=0;j<step&&(i+j)<samples.length;j++){ const s=samples[i+j]; if(s<min) min=s; if(s>max) max=s; } const y1=(1-(max+1)/2)*H, y2=(1-(min+1)/2)*H; cx.moveTo(x,y1); cx.lineTo(x,y2); } cx.stroke(); const start=safeParse(startEl.value)??0; const end=safeParse(endEl.value)??buf.duration; const sx=Math.max(0,Math.min(W,(start/buf.duration)*W)); const ex=Math.max(0,Math.min(W,(end/buf.duration)*W)); cx.fillStyle='rgba(56,102,245,0.20)'; cx.fillRect(sx,0,Math.max(0,ex-sx),H); const cxpos=(cursor/buf.duration)*W; cx.strokeStyle='#ffd166'; cx.lineWidth=3; cx.beginPath(); cx.moveTo(cxpos,0); cx.lineTo(cxpos,H); cx.stroke(); }
@@ -130,7 +154,7 @@ function drawWave(){ const W=wave.width=wave.clientWidth*2; const H=wave.height=
 function stop(){ if(source){ try{ source.stop(); }catch{} source.disconnect(); source=null; } isPlaying=false; if(rafId) cancelAnimationFrame(rafId); rafId=null; drawWave(); }
 function play(){ if(!buf) return; stop(); source=ctx.createBufferSource(); source.buffer=buf; source.connect(ctx.destination); const offset=Math.max(0,Math.min(cursor,buf.duration)); source.start(0,offset); isPlaying=true; const t0=performance.now(); const tick=()=>{ if(!isPlaying){ cancelAnimationFrame(rafId); return; } const dt=(performance.now()-t0)/1000; cursor=offset+dt; if(cursor>=buf.duration){ stop(); cursor=buf.duration; } drawWave(); rafId=requestAnimationFrame(tick); }; tick(); }
 
-function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+function download(blob,name){ const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; a.style.display='none'; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000); }
 
 function encodeWAVFromBuffer(audioBuffer,startSec,endSec,outFormat){ const sr=audioBuffer.sampleRate; const ch=audioBuffer.numberOfChannels; const total=audioBuffer.length; const st=Math.max(0,Math.floor(startSec*sr)); const et=Math.min(total,Math.floor((endSec??(total/sr))*sr)); if(et<=st) throw new Error('End must be after start'); const frames=et-st; const chans=[]; for(let i=0;i<ch;i++){ const src=audioBuffer.getChannelData(i); chans.push(src.subarray(st,et)); }
   let bytesPerSample, writeSample; if(outFormat==='32f'){ bytesPerSample=4; writeSample=(view,off,val)=>view.setFloat32(off,val,true); } else if(outFormat==='24'){ bytesPerSample=3; writeSample=(view,off,val)=>{ let s=Math.max(-1,Math.min(1,val)); s=Math.floor(s<0?s*0x800000:s*0x7FFFFF); view.setUint8(off, s & 0xFF); view.setUint8(off+1, (s>>8) & 0xFF); view.setUint8(off+2, (s>>16) & 0xFF); }; } else { bytesPerSample=2; writeSample=(view,off,val)=>{ let s=Math.max(-1,Math.min(1,val)); view.setInt16(off, s<0?s*0x8000:s*0x7FFF, true); }; }
@@ -146,8 +170,38 @@ async function loadFile(file){ if(!file) return; errEl.textContent=''; try{
   const ab = await file.arrayBuffer();
   buf = await new Promise((resolve,reject)=>{ ctx.decodeAudioData(ab, resolve, err=>reject(err)); });
   cursor=0; stop(); setMeta(); enableUI(true); drawWave(); clipInfo.textContent=''; previewAudio.removeAttribute('src'); if(previewURL){ URL.revokeObjectURL(previewURL); previewURL=null; }
+  segments=[]; renderSegs();
 } catch(err){ console.error(err); errEl.textContent='Decode 실패: 브라우저가 코덱(AAC 등)을 지원하지 않거나 파일이 손상되었을 수 있어요. 최신 Chrome/Safari에서 시도하거나 WAV로 변환해보세요.'; enableUI(false); }
 }
+
+function renderSegs(){ segBody.innerHTML=''; segments.forEach((s,idx)=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML = `<td>${idx+1}</td>
+    <td>${s.start.toFixed(3)}s</td>
+    <td>${s.end.toFixed(3)}s</td>
+    <td>
+      <button class="btn sm" data-act="preview" data-id="${s.id}">미리듣기</button>
+      <button class="btn sm" data-act="save" data-id="${s.id}">저장</button>
+      <button class="btn danger sm" data-act="del" data-id="${s.id}">삭제</button>
+    </td>`;
+  segBody.appendChild(tr);
+  });
+}
+
+segBody.addEventListener('click', e=>{
+  const btn=e.target.closest('button'); if(!btn) return; const id=+btn.dataset.id; const seg=segments.find(x=>x.id===id); if(!seg) return;
+  const choice=bpsEl.value; const outFmt=(choice==='32f')?'32f':(choice==='24')?'24':'16';
+  if(btn.dataset.act==='preview'){
+    const blob=encodeWAVFromBuffer(buf, seg.start, seg.end, outFmt);
+    if(previewURL) URL.revokeObjectURL(previewURL); previewURL=URL.createObjectURL(blob); previewAudio.src=previewURL; previewAudio.currentTime=0; previewAudio.play().catch(()=>{}); clipInfo.textContent=`클립 #${segments.indexOf(seg)+1} • ${fmtTime(seg.end-seg.start)} (${seg.start.toFixed(3)} → ${seg.end.toFixed(3)})`;
+  } else if(btn.dataset.act==='save'){
+    const blob=encodeWAVFromBuffer(buf, seg.start, seg.end, outFmt);
+    const base=(fileEl.files?.[0]?.name||'audio').replace(/\.[^.]+$/,'');
+    download(blob, `${base}_seg${segments.indexOf(seg)+1}_${seg.start.toFixed(3)}-${seg.end.toFixed(3)}.wav`);
+  } else if(btn.dataset.act==='del'){
+    segments = segments.filter(x=>x.id!==id); renderSegs();
+  }
+});
 
 fileEl.addEventListener('change', e=>loadFile(e.target.files[0]));
 ['dragenter','dragover'].forEach(evt=>document.addEventListener(evt, e=>e.preventDefault()));
@@ -163,12 +217,33 @@ startEl.addEventListener('input', drawWave); endEl.addEventListener('input', dra
 previewBtn.addEventListener('click', ()=>{ if(!buf) return; const start=safeParse(startEl.value)??0; const end=safeParse(endEl.value)??buf.duration; if(end<=start){ alert('끝 시간이 시작 시간보다 커야 합니다'); return; } const choice=bpsEl.value; const outFmt=(choice==='32f')?'32f':(choice==='24')?'24':'16'; const blob=encodeWAVFromBuffer(buf,start,end,outFmt); if(previewURL) URL.revokeObjectURL(previewURL); previewURL=URL.createObjectURL(blob); previewAudio.src=previewURL; previewAudio.currentTime=0; previewAudio.play().catch(()=>{}); clipInfo.textContent=`클립 길이 ${fmtTime(end-start)}  •  ${start.toFixed(3)}s → ${end.toFixed(3)}s`;
 });
 
+addSegBtn.addEventListener('click', ()=>{ if(!buf) return; const start=safeParse(startEl.value)??0; const end=safeParse(endEl.value)??buf.duration; if(end<=start){ alert('끝 시간이 시작 시간보다 커야 합니다'); return; } segments.push({id:nextId++, start, end}); renderSegs(); });
+
 trimBtn.addEventListener('click', ()=>{ if(!buf) return; const start=safeParse(startEl.value)??0; const end=safeParse(endEl.value)??buf.duration; if(end<=start){ alert('끝 시간이 시작 시간보다 커야 합니다'); return; } const choice=bpsEl.value; const outFmt=(choice==='32f')?'32f':(choice==='24')?'24':'16'; const blob=encodeWAVFromBuffer(buf,start,end,outFmt); const base=(fileEl.files?.[0]?.name||'audio').replace(/\.[^.]+$/,''); const name=`${base}_clip_${start.toFixed(3)}-${end.toFixed(3)}.wav`; download(blob, name); });
 
-resetBtn.addEventListener('click', ()=>{ stop(); buf=null; fileEl.value=''; startEl.value=''; endEl.value=''; enableUI(false); setMeta(); drawWave(); clipInfo.textContent=''; previewAudio.removeAttribute('src'); if(previewURL){ URL.revokeObjectURL(previewURL); previewURL=null; }
+downloadAllBtn.addEventListener('click', async ()=>{ if(!buf||segments.length===0) return; const choice=bpsEl.value; const outFmt=(choice==='32f')?'32f':(choice==='24')?'24':'16'; const base=(fileEl.files?.[0]?.name||'audio').replace(/\.[^.]+$/,'');
+  if(window.JSZip){
+    const zip=new JSZip();
+    for(const [i,s] of segments.entries()){
+      const blob=encodeWAVFromBuffer(buf, s.start, s.end, outFmt);
+      const arrBuf = await blob.arrayBuffer();
+      zip.file(`${base}_seg${i+1}_${s.start.toFixed(3)}-${s.end.toFixed(3)}.wav`, arrBuf);
+    }
+    const zipBlob = await zip.generateAsync({type:'blob'});
+    download(zipBlob, `${base}_segments.zip`);
+  } else {
+    // 폴백: 개별 다운로드 (브라우저 설정에 따라 여러 파일 자동 저장이 제한될 수 있음)
+    segments.forEach((s,i)=>{
+      const blob=encodeWAVFromBuffer(buf, s.start, s.end, outFmt);
+      download(blob, `${base}_seg${i+1}_${s.start.toFixed(3)}-${s.end.toFixed(3)}.wav`);
+    });
+  }
 });
 
-enableUI(false); setMeta(); drawWave();
+resetBtn.addEventListener('click', ()=>{ stop(); buf=null; fileEl.value=''; startEl.value=''; endEl.value=''; enableUI(false); setMeta(); drawWave(); clipInfo.textContent=''; previewAudio.removeAttribute('src'); if(previewURL){ URL.revokeObjectURL(previewURL); previewURL=null; } segments=[]; renderSegs();
+});
+
+enableUI(false); setMeta(); drawWave(); renderSegs();
 </script>
 </body>
 </html>
